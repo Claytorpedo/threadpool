@@ -55,13 +55,13 @@ private:
 
 	class JobQueue;
 	std::unique_ptr<JobQueue> job_queue_;
+	class Sema;
+	std::unique_ptr<Sema> sema_; // Semaphore for worker threads.
+
 	std::vector<std::thread> threads_;
 
 	thread_num num_extend_;
 	thread_num max_threads_;
-
-	class Sema;
-	std::unique_ptr<Sema> sema_; // Semaphore for worker threads.
 
 	std::atomic<thread_num> available_threads_;
 	std::atomic<bool> is_alive_;

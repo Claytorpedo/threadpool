@@ -32,7 +32,7 @@ public:
 		value_ = 0;
 	}
 private:
-	void _wait(std::function<bool()> waitCond) {
+	inline void _wait(std::function<bool()> waitCond) {
 		std::unique_lock<std::mutex> lock(mutex_);
 		cond_.wait(lock, [this, waitCond]() {
 			if (waitCond())
@@ -78,7 +78,9 @@ private:
 };
 
 Threadpool::Threadpool(thread_num initThreads, thread_num maxThreads, thread_num extendInc)
-	: num_extend_(extendInc), max_threads_(maxThreads), is_alive_(true) {
+	: job_queue_(std::make_unique<JobQueue>()), sema_(std::make_unique<Sema>()),
+	num_extend_(extendInc), max_threads_(maxThreads), available_threads_(initThreads), is_alive_(true)
+{
 	threads_.reserve(initThreads);
 	for (thread_num i = 0; i < initThreads; ++i)
 		threads_.emplace_back([this] { _thread_run(); });
