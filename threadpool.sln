@@ -5,6 +5,11 @@ VisualStudioVersion = 15.0.27428.2043
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Threadpool", "Threadpool\Threadpool.vcxproj", "{A81F6589-3412-4253-810C-FFF03E612842}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A81F6589-3412-4253-810C-FFF03E612842} = {A81F6589-3412-4253-810C-FFF03E612842}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +26,14 @@ Global
 		{A81F6589-3412-4253-810C-FFF03E612842}.Release|x64.Build.0 = Release|x64
 		{A81F6589-3412-4253-810C-FFF03E612842}.Release|x86.ActiveCfg = Release|Win32
 		{A81F6589-3412-4253-810C-FFF03E612842}.Release|x86.Build.0 = Release|Win32
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Debug|x64.ActiveCfg = Debug|x64
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Debug|x64.Build.0 = Debug|x64
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Debug|x86.ActiveCfg = Debug|Win32
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Debug|x86.Build.0 = Debug|Win32
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Release|x64.ActiveCfg = Release|x64
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Release|x64.Build.0 = Release|x64
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Release|x86.ActiveCfg = Release|Win32
+		{963F9DB6-B731-43FC-8FE4-EBBCF65EB940}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
