@@ -6,11 +6,11 @@
 #include <mutex>
 #include <utility>
 #include <type_traits>
+#include <vector>
 
 class Threadpool {
 public:
 	using thread_num = int_fast16_t;
-	using Job = std::function<void()>;
 
 	static const thread_num DEFAULT_INITIAL_THREADS = 8;
 	static const thread_num DEFAULT_MAX_THREADS = 0;
@@ -31,11 +31,12 @@ public:
 
 	template<typename FuncType, typename... Args>
 	auto add(FuncType&& func, Args&&... args) ->std::future<std::invoke_result_t<FuncType&&, Args&&...>> {
-		auto task = std::make_shared<std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>(Args&&...)>>(std::bind(std::forward<FuncType>(func), std::forward<Args>(args)...));
+		auto task = std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>()>(std::bind(std::forward<FuncType>(func), std::forward<Args>(args)...));
+		auto future = task.get_future();
 
-		_add(std::make_unique<Job>([task]() { (*task)(); }));
+		_add(std::make_unique<PackagedJob<std::invoke_result_t<FuncType&&, Args&&...>()>>(std::move(task)));
 
-		return task->get_future();
+		return future;
 	}
 
 	// Wait for all jobs to finish.
@@ -48,6 +49,24 @@ public:
 	std::size_t numThreads() const;
 
 private:
+
+	struct Job {
+		virtual ~Job() = default;
+		virtual void operator()() = 0;
+		Job() = default;
+		Job(const Job&) = delete;
+		Job& operator=(const Job&) = delete;
+	};
+
+	template <typename FuncType, typename... Args>
+	struct PackagedJob : public Job {
+		explicit PackagedJob(std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>()>&& task) : task_(std::move(task)) {}
+		~PackagedJob() override = default;
+		inline void operator()() override { task_(); }
+	private:
+		std::packaged_task <std::invoke_result_t<FuncType&&, Args&&...>()> task_;
+	};
+
 	void _add(std::unique_ptr<Job> job);
 	thread_num _extend();
 
