@@ -1,23 +1,21 @@
 #include "Threadpool.hpp"
 
 #include <queue>
-#include <optional>
 
 class Threadpool::Sema {
 public:
-	void up(unsigned int n = 1) {
+	void up() {
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
-			value_ += n;
+			++value_;
 		}
-		for (unsigned int i = 0; i < n; ++i)
-			cond_.notify_one();
+		cond_.notify_one();
 	}
 	// Wake all threads and set an optional value.
-	void notifyAll(std::optional<int> newValue) {
-		if (newValue) {
+	void notifyAll(int newValue) {
+		{
 			std::lock_guard<std::mutex> lock(mutex_);
-			value_ = *newValue;
+			value_ = newValue;
 		}
 		cond_.notify_all();
 	}
@@ -53,8 +51,7 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		queue_.push(std::move(job));
 	}
-	std::unique_ptr<Job> getJob()
-	{
+	std::unique_ptr<Job> getJob() {
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (queue_.empty())
 			return nullptr;
