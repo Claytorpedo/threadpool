@@ -5,6 +5,7 @@
 #include <future>
 #include <mutex>
 #include <utility>
+#include <type_traits>
 
 class Threadpool {
 public:
@@ -29,13 +30,12 @@ public:
 	Threadpool& operator=(Threadpool&&) = delete;
 
 	template<typename FuncType, typename... Args>
-	auto add(FuncType&& func, Args&&... args) ->std::future<decltype(func(args...))> {
-		const auto task = std::packaged_task<decltype(func(args...))>(std::bind (std::forward<FuncType>(func), std::forward<Args>(args)...));
-		const auto future = task.get_future();
+	auto add(FuncType&& func, Args&&... args) ->std::future<std::invoke_result_t<FuncType&&, Args&&...>> {
+		auto task = std::make_shared<std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>(Args&&...)>>(std::bind(std::forward<FuncType>(func), std::forward<Args>(args)...));
 
-		_add(std::unique_ptr<Job>([task]() { task(); }));
+		_add(std::make_unique<Job>([task]() { (*task)(); }));
 
-		return future;
+		return task->get_future();
 	}
 
 	// Wait for all jobs to finish.
