@@ -81,7 +81,7 @@ private:
 	thread_num max_threads_;
 
 	std::mutex mutex_;
-	std::condition_variable finished_all_jobs_cond_;;
+	std::condition_variable finished_all_jobs_cond_;
 	std::condition_variable task_cond_;
 
 	thread_num working_threads_;

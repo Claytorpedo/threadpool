@@ -17,7 +17,7 @@ SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 }
 
 // ------------------ Test functions/functors ----------------------
-void voidFunc() {};
+void voidFunc() {}
 void getVal(int* val) { *val = 8; }
 void reverseCopyVec(int numItems, const std::vector<std::string>& input, std::vector<std::string>& output) {
 	for (int i = numItems; i > 0; ) {
