@@ -2,49 +2,6 @@
 
 #include <queue>
 
-class Threadpool::Sema {
-public:
-	void up() {
-		{
-			std::lock_guard<std::mutex> lock(mutex_);
-			++value_;
-		}
-		cond_.notify_one();
-	}
-	// Wake all threads and set an optional value.
-	void notifyAll(int newValue) {
-		{
-			std::lock_guard<std::mutex> lock(mutex_);
-			value_ = newValue;
-		}
-		cond_.notify_all();
-	}
-	void wait() {
-		_wait([this]() { return value_ <= 0; });
-	}
-	void waitZero() {
-		_wait([this]() { return value_ == 0; });
-	}
-	void reset() {
-		std::lock_guard<std::mutex> lock(mutex_);
-		value_ = 0;
-	}
-private:
-	inline void _wait(std::function<bool()> waitCond) {
-		std::unique_lock<std::mutex> lock(mutex_);
-		cond_.wait(lock, [this, waitCond]() {
-			if (waitCond())
-				return false;
-			--value_;
-			return true;
-		});
-	}
-
-	std::mutex mutex_;
-	std::condition_variable cond_;
-	int value_ = 0;
-};
-
 class Threadpool::JobQueue {
 public:
 	void push(std::unique_ptr<Job> job) {
@@ -52,7 +9,7 @@ public:
 		queue_.push(std::move(job));
 	}
 	std::unique_ptr<Job> getJob() {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> latch(mutex_);
 		if (queue_.empty())
 			return nullptr;
 		std::unique_ptr<Job> job = std::move(queue_.front());
@@ -69,14 +26,18 @@ public:
 		return queue_.size();
 	}
 
+	bool empty() const {
+		std::lock_guard<std::mutex> lock(mutex_);
+		return queue_.empty();
+	}
+
 private:
 	std::queue<std::unique_ptr<Job>> queue_;
 	mutable std::mutex mutex_;
 };
 
 Threadpool::Threadpool(thread_num initThreads, thread_num maxThreads, thread_num extendInc)
-	: job_queue_(std::make_unique<JobQueue>()), sema_(std::make_unique<Sema>()),
-	num_extend_(extendInc), max_threads_(maxThreads), available_threads_(initThreads), is_alive_(true)
+	: job_queue_(std::make_unique<JobQueue>()), num_extend_(extendInc), max_threads_(maxThreads), should_finish_(false)
 {
 	threads_.reserve(initThreads);
 	for (thread_num i = 0; i < initThreads; ++i)
@@ -84,21 +45,22 @@ Threadpool::Threadpool(thread_num initThreads, thread_num maxThreads, thread_num
 }
 
 Threadpool::~Threadpool() {
-	is_alive_ = false;
-	// Notify all our threads to finish all jobs.
-	sema_->notifyAll(static_cast<int>(job_queue_->size() + threads_.size()));
+	should_finish_ = true;
+	task_cond_.notify_all();
 
 	for (auto& thread : threads_)
 		thread.join();
 }
 
 void Threadpool::waitOnAllJobs() {
-	sema_->waitZero(); // Wait until there are no longer any pending jobs.
+	std::unique_lock<std::mutex> latch(mutex_);
+	finished_all_jobs_cond_.wait(latch, [this]() {
+		return job_queue_->empty() && working_threads_ == 0;
+	});
 }
 
 void Threadpool::clearPendingJobs() {
 	job_queue_->clear();
-	sema_->reset();
 }
 
 std::size_t Threadpool::numPendingJobs() const {
@@ -106,7 +68,7 @@ std::size_t Threadpool::numPendingJobs() const {
 }
 
 std::size_t Threadpool::numIdleThreads() const {
-	return static_cast<std::size_t>(available_threads_);
+	return threads_.size() - static_cast<std::size_t>(working_threads_);
 }
 
 std::size_t Threadpool::numThreads() const {
@@ -115,13 +77,13 @@ std::size_t Threadpool::numThreads() const {
 
 void Threadpool::_add(std::unique_ptr<Job> job) {
 	job_queue_->push(std::move(job));
-	sema_->up();
-	if (available_threads_ == 0)
+	task_cond_.notify_one();
+	if (working_threads_ == static_cast<thread_num>(threads_.size()))
 		_extend();
 }
 
 Threadpool::thread_num Threadpool::_extend() {
-	if (!is_alive_ || num_extend_ <= 0)
+	if (should_finish_ || num_extend_ <= 0)
 		return 0;
 
 	const thread_num currentSize = static_cast<thread_num>(threads_.size());
@@ -131,21 +93,27 @@ Threadpool::thread_num Threadpool::_extend() {
 	for (thread_num i = 0; i < sizeIncrease; ++i)
 		threads_.emplace_back([this] { _thread_run(); });
 
-	available_threads_ += sizeIncrease;
 	return sizeIncrease;
 }
 
 void Threadpool::_thread_run() {
-	while (is_alive_) {
-		sema_->wait();
+	while (true) {
+		std::unique_lock<std::mutex> latch(mutex_);
+		task_cond_.wait(latch, [this] {
+			return should_finish_ || !job_queue_->empty();
+		});
+		if (job_queue_->empty() && should_finish_)
+			return;
 		std::unique_ptr<Job> job = job_queue_->getJob();
-		if (!is_alive_)
-			break;
-		if (job) {
-			--available_threads_;
+		++working_threads_;
+		latch.unlock();
+
+		if (job)
 			(*job)();
-			++available_threads_;
-		}
+
+		latch.lock();
+		--working_threads_;
+		latch.unlock();
+		finished_all_jobs_cond_.notify_one();
 	}
-	--available_threads_;
 }
