@@ -45,7 +45,10 @@ Threadpool::Threadpool(thread_num initThreads, thread_num maxThreads, thread_num
 }
 
 Threadpool::~Threadpool() {
-	should_finish_ = true;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		should_finish_ = true;
+	}
 	task_cond_.notify_all();
 
 	for (auto& thread : threads_)
@@ -108,7 +111,7 @@ void Threadpool::_thread_run() {
 		++working_threads_;
 		latch.unlock();
 
-		if (job)
+		if (job) // Job queue may have been cleared before we got a job.
 			(*job)();
 
 		latch.lock();

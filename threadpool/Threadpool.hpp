@@ -84,6 +84,6 @@ private:
 	std::condition_variable finished_all_jobs_cond_;
 	std::condition_variable task_cond_;
 
-	thread_num working_threads_;
-	std::atomic<bool> should_finish_;
+	std::atomic<thread_num> working_threads_;
+	bool should_finish_;
 };
