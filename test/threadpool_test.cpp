@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <string>
+#include <memory>
+#include <functional>
 
 SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 	WHEN("A threadpool is initialized with default parameters.") {
@@ -28,12 +30,27 @@ struct voidFunctor { void operator()() const {} };
 struct voidFunctorWithParam {
 	void operator()(std::string& str) {
 		str += addMe;
-		addMe = str;
 	};
 	std::string addMe;
 };
 
 int intFunc() { return 4; }
+bool boolFunc() { return true; }
+
+struct info {
+	double time; int id; std::string name;
+	info() = default;
+	info(double time, int id, const std::string& name) : time(time), id(id), name(name) {}
+	bool operator==(const info& o) const { return time == o.time && id == o.id && name == o.name; }
+};
+info  makeInfo(double time, int id, const std::string& name) {
+	return info{ time, id, name };
+}
+std::unique_ptr<info> makeUniqueInfo(double time, int id, const std::string& name) {
+	return std::make_unique<info>( time, id, name );
+}
+int addFunc(int a, int b) { return a + b; }
+
 // -----------------------------------------------------------------
 
 SCENARIO("A threadpool is given various void functions.", "[threadpool][add][void]") {
@@ -52,17 +69,32 @@ SCENARIO("A threadpool is given various void functions.", "[threadpool][add][voi
 				result.get();
 			}
 		}
-		WHEN("A void functor taking no arguments is added.") {
+		WHEN("A void functor taking no arguments is added by value.") {
 			voidFunctor func;
-			auto result1 = pool.add(func);              // By value.
-			auto result2 = pool.add(std::ref(func));    // By reference;
-			auto result3 = pool.add(voidFunctor(func)); // By copy constructor.
-			auto result4 = pool.add(std::move(func));   // By move.
+			auto result = pool.add(func);
 			THEN("It accepts it, and completes the job successfully.") {
-				result1.get();
-				result2.get();
-				result3.get();
-				result4.get();
+				result.get();
+			}
+		}
+		WHEN("A void functor taking no arguments is added by reference.") {
+			voidFunctor func;
+			auto result = pool.add(std::ref(func));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+			}
+		}
+		WHEN("A void functor taking no arguments is added by copy constructor.") {
+			voidFunctor func;
+			auto result = pool.add(voidFunctor(func));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+			}
+		}
+		WHEN("A void functor taking no arguments is added by move.") {
+			voidFunctor func;
+			auto result = pool.add(std::move(func));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
 			}
 		}
 		WHEN("A void function with one argument is added.") {
@@ -87,9 +119,9 @@ SCENARIO("A threadpool is given various void functions.", "[threadpool][add][voi
 			auto result = pool.add(reverseCopyVec, input.size(), std::ref(input), std::ref(output));
 			THEN("It accepts it, and completes the job successfully.") {
 				result.get();
-				REQUIRE(output[0] == "three");
-				REQUIRE(output[1] == "two");
-				REQUIRE(output[2] == "one");
+				CHECK(output[0] == "three");
+				CHECK(output[1] == "two");
+				CHECK(output[2] == "one");
 			}
 		}
 		WHEN("A void lambda taking one argument is added.") {
@@ -98,6 +130,42 @@ SCENARIO("A threadpool is given various void functions.", "[threadpool][add][voi
 			THEN("It accepts it, and completes the job successfully.") {
 				result.get();
 				REQUIRE(i == 42);
+			}
+		}
+		WHEN("A void functor with arguments is added by value.") {
+			std::string param("hello ");
+			voidFunctorWithParam functor{ "world" };
+			auto result = pool.add(functor, std::ref(param));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+				REQUIRE(param == "hello world");
+			}
+		}
+		WHEN("A void functor with arguments is added by reference.") {
+			std::string param("hello ");
+			voidFunctorWithParam functor{ "world" };
+			auto result = pool.add(std::ref(functor), std::ref(param));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+				REQUIRE(param == "hello world");
+			}
+		}
+		WHEN("A void functor with arguments is added by copy constructor.") {
+			std::string param("hello ");
+			voidFunctorWithParam functor{ "world" };
+			auto result = pool.add(voidFunctorWithParam(functor), std::ref(param));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+				REQUIRE(param == "hello world");
+			}
+		}
+		WHEN("A void functor with arguments is added by move.") {
+			std::string param("hello ");
+			voidFunctorWithParam functor{ "world" };
+			auto result = pool.add(std::move(functor), std::ref(param));
+			THEN("It accepts it, and completes the job successfully.") {
+				result.get();
+				REQUIRE(param == "hello world");
 			}
 		}
 	}
@@ -111,6 +179,61 @@ SCENARIO("A threadpool is given various functions with return values.", "[thread
 			auto result = pool.add(intFunc);
 			THEN("It accepts it, and returns the expected value.") {
 				REQUIRE(result.get() == 4);
+			}
+		}
+		WHEN("A function returning a boolean with no arguments is added.") {
+			auto result = pool.add(boolFunc);
+			THEN("It accepts it, and resturns the expected value.") {
+				REQUIRE(result.get() == true);
+			}
+		}
+		WHEN("A function returning a struct is added.") {
+			auto result = pool.add(makeInfo, 9.77, 10, "Happy Mannington");
+			THEN("It accepts it, and returns the expected value.") {
+				REQUIRE(result.get() == info{ 9.77, 10, "Happy Mannington" });
+			}
+		}
+		WHEN("A function is added through a bind that returns a struct.") {
+			auto result = pool.add(std::bind(makeInfo, 9.77, 10, "Happy Mannington"));
+			THEN("It accepts it, and returns the expected value.") {
+				REQUIRE(result.get() == info{ 9.77, 10, "Happy Mannington" });
+			}
+		}
+		WHEN("A function returning a unique_ptr is added.") {
+			auto result = pool.add(std::bind(makeUniqueInfo, 9.77, 10, "Happy Mannington"));
+			THEN("It accepts it, and returns the expected value.") {
+				REQUIRE((*result.get()) == info{ 9.77, 10, "Happy Mannington" });
+			}
+		}
+	}
+}
+
+SCENARIO("A threadpool is given several functions at the same time.", "[threadpool][add]") {
+	GIVEN("A default-initialized threadpool.") {
+		Threadpool pool;
+
+		WHEN("Two functions are added in succession.") {
+			auto result1 = pool.add(boolFunc);
+			auto result2 = pool.add(intFunc);
+			THEN("It accepts them both, and completes them.") {
+				CHECK(result1.get() == true);
+				CHECK(result2.get() == 4);
+			}
+		}
+		WHEN("Many functions are added sequentially.") {
+			const int numFuncs = 10000;
+			std::vector<std::future<int>> results;
+			results.reserve(numFuncs);
+			for (int i = 0; i < numFuncs; ++i) {
+				results.push_back(pool.add(addFunc, i, 1));
+			}
+			AND_WHEN("It waits for all jobs to finish.") {
+				pool.waitOnAllJobs();
+				THEN("They are all completed successfully.") {
+					for (int i = 0; i < numFuncs; ++i) {
+						CHECK(results[i].get() == i + 1);
+					}
+				}
 			}
 		}
 	}
