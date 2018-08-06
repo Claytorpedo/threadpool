@@ -41,6 +41,8 @@ public:
 
 	// Wait for all current jobs to finish.
 	void waitOnAllJobs();
+	// Check if all jobs are completed.
+	bool isIdle() const;
 
 	void clearPendingJobs();
 
@@ -80,7 +82,7 @@ private:
 	thread_num num_extend_;
 	thread_num max_threads_;
 
-	std::mutex mutex_;
+	mutable std::mutex mutex_;
 	std::condition_variable finished_all_jobs_cond_;
 	std::condition_variable task_cond_;
 

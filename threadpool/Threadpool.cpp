@@ -62,6 +62,11 @@ void Threadpool::waitOnAllJobs() {
 	});
 }
 
+bool Threadpool::isIdle() const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return job_queue_->empty() && working_threads_ == 0;
+}
+
 void Threadpool::clearPendingJobs() {
 	job_queue_->clear();
 }

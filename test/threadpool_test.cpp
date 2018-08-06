@@ -5,6 +5,8 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <chrono>
+#include <thread>
 
 SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 	WHEN("A threadpool is initialized with default parameters.") {
@@ -19,37 +21,46 @@ SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 }
 
 // ------------------ Test functions/functors ----------------------
-void voidFunc() {}
-void getVal(int* val) { *val = 8; }
-void reverseCopyVec(int numItems, const std::vector<std::string>& input, std::vector<std::string>& output) {
-	for (int i = numItems; i > 0; ) {
-		output.push_back(input[--i]);
+namespace {
+	// How long we expect that afterwards the other thread should have completed a task.
+	const std::chrono::milliseconds THREAD_WAIT_MILLIS(200);
+
+	void voidFunc() {}
+	void getVal(int* val) { *val = 8; }
+	void reverseCopyVec(int numItems, const std::vector<std::string>& input, std::vector<std::string>& output) {
+		for (int i = numItems; i > 0; ) {
+			output.push_back(input[--i]);
+		}
+	}
+	struct voidFunctor { void operator()() const {} };
+	struct voidFunctorWithParam {
+		void operator()(std::string& str) {
+			str += addMe;
+		};
+		std::string addMe;
+	};
+
+	int intFunc() { return 4; }
+	bool boolFunc() { return true; }
+
+	struct info {
+		double time; int id; std::string name;
+		info() = default;
+		info(double time, int id, const std::string& name) : time(time), id(id), name(name) {}
+		bool operator==(const info& o) const { return time == o.time && id == o.id && name == o.name; }
+	};
+	info  makeInfo(double time, int id, const std::string& name) {
+		return info{ time, id, name };
+	}
+	std::unique_ptr<info> makeUniqueInfo(double time, int id, const std::string& name) {
+		return std::make_unique<info>(time, id, name);
+	}
+	int addFunc(int a, int b) { return a + b; }
+
+	void waitFunc() {
+		std::this_thread::sleep_for(THREAD_WAIT_MILLIS);
 	}
 }
-struct voidFunctor { void operator()() const {} };
-struct voidFunctorWithParam {
-	void operator()(std::string& str) {
-		str += addMe;
-	};
-	std::string addMe;
-};
-
-int intFunc() { return 4; }
-bool boolFunc() { return true; }
-
-struct info {
-	double time; int id; std::string name;
-	info() = default;
-	info(double time, int id, const std::string& name) : time(time), id(id), name(name) {}
-	bool operator==(const info& o) const { return time == o.time && id == o.id && name == o.name; }
-};
-info  makeInfo(double time, int id, const std::string& name) {
-	return info{ time, id, name };
-}
-std::unique_ptr<info> makeUniqueInfo(double time, int id, const std::string& name) {
-	return std::make_unique<info>( time, id, name );
-}
-int addFunc(int a, int b) { return a + b; }
 
 // -----------------------------------------------------------------
 
@@ -234,6 +245,28 @@ SCENARIO("A threadpool is given several functions at the same time.", "[threadpo
 						CHECK(results[i].get() == i + 1);
 					}
 				}
+			}
+		}
+	}
+}
+
+SCENARIO("A threadpool is checked whether it is idle.", "[threadpool][isIdle]") {
+	GIVEN("A default-initialized threadpool.") {
+		Threadpool pool;
+
+		WHEN("A function that takes some time to complete is added.") {
+			pool.add(waitFunc);
+			THEN("The threadpool is not idle until after it completes.") {
+				CHECK_FALSE(pool.isIdle());
+				pool.waitOnAllJobs();
+				CHECK(pool.isIdle());
+			}
+		}
+		WHEN("A function that returns immediately is added.") {
+			pool.add(voidFunc);
+			THEN("After a short wait, the threadpool should be idle.") {
+				std::this_thread::sleep_for(THREAD_WAIT_MILLIS);
+				CHECK(pool.isIdle());
 			}
 		}
 	}
