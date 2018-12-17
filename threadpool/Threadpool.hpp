@@ -30,11 +30,13 @@ public:
 	Threadpool& operator=(Threadpool&&) = delete;
 
 	template<typename FuncType, typename... Args>
-	auto add(FuncType&& func, Args&&... args) ->std::future<std::invoke_result_t<FuncType&&, Args&&...>> {
-		auto task = std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>()>(std::bind(std::forward<FuncType>(func), std::forward<Args>(args)...));
+	auto add(FuncType&& func, Args&&... args) {
+		using PackageType = std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>()>;
+
+		auto task = PackageType(std::bind(std::forward<FuncType>(func), std::forward<Args>(args)...));
 		auto future = task.get_future();
 
-		_add(std::make_unique<PackagedJob<std::invoke_result_t<FuncType&&, Args&&...>()>>(std::move(task)));
+		_add(std::make_unique<PackagedJob<PackageType>>(std::move(task)));
 
 		return future;
 	}
@@ -60,13 +62,13 @@ private:
 		Job& operator=(const Job&) = delete;
 	};
 
-	template <typename FuncType, typename... Args>
+	template <typename PackageType>
 	struct PackagedJob : public Job {
-		explicit PackagedJob(std::packaged_task<std::invoke_result_t<FuncType&&, Args&&...>()>&& task) : task_(std::move(task)) {}
+		explicit PackagedJob(PackageType&& task) : task_(std::move(task)) {}
 		~PackagedJob() override = default;
 		inline void operator()() override { task_(); }
 	private:
-		std::packaged_task <std::invoke_result_t<FuncType&&, Args&&...>()> task_;
+		PackageType task_;
 	};
 
 	void _add(std::unique_ptr<Job> job);
