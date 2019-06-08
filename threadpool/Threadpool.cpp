@@ -5,11 +5,11 @@
 class Threadpool::JobQueue {
 public:
 	void push(std::unique_ptr<Job> job) {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock{mutex_};
 		queue_.push(std::move(job));
 	}
 	std::unique_ptr<Job> getJob() {
-		std::lock_guard<std::mutex> latch(mutex_);
+		std::lock_guard<std::mutex> latch{mutex_};
 		if (queue_.empty())
 			return nullptr;
 		std::unique_ptr<Job> job = std::move(queue_.front());
@@ -17,17 +17,17 @@ public:
 		return job;
 	}
 	void clear() {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock{mutex_};
 		std::queue<std::unique_ptr<Job>>().swap(queue_);
 	}
 
 	std::size_t size() const {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock{mutex_};
 		return queue_.size();
 	}
 
 	bool empty() const {
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock{mutex_};
 		return queue_.empty();
 	}
 
@@ -37,16 +37,16 @@ private:
 };
 
 Threadpool::Threadpool(thread_num initThreads, thread_num maxThreads, thread_num extendInc)
-	: job_queue_(std::make_unique<JobQueue>()), num_extend_(extendInc), max_threads_(maxThreads), should_finish_(false)
+	: job_queue_(std::make_unique<JobQueue>()), num_extend_(extendInc), max_threads_(maxThreads)
 {
 	threads_.reserve(initThreads);
 	for (thread_num i = 0; i < initThreads; ++i)
-		threads_.emplace_back([this] { _thread_run(); });
+		threads_.emplace_back([this] { _run_thread(); });
 }
 
 Threadpool::~Threadpool() {
 	{
-		std::lock_guard<std::mutex> lock(mutex_);
+		std::lock_guard<std::mutex> lock{mutex_};
 		should_finish_ = true;
 	}
 	task_cond_.notify_all();
@@ -56,14 +56,14 @@ Threadpool::~Threadpool() {
 }
 
 void Threadpool::waitOnAllJobs() {
-	std::unique_lock<std::mutex> latch(mutex_);
-	finished_all_jobs_cond_.wait(latch, [this]() {
+	std::unique_lock<std::mutex> latch{mutex_};
+	finished_all_jobs_cond_.wait(latch, [this] {
 		return job_queue_->empty() && working_threads_ == 0;
 	});
 }
 
 bool Threadpool::isIdle() const {
-	std::lock_guard<std::mutex> lock(mutex_);
+	std::lock_guard<std::mutex> lock{mutex_};
 	return job_queue_->empty() && working_threads_ == 0;
 }
 
@@ -99,14 +99,14 @@ Threadpool::thread_num Threadpool::_extend() {
 	const thread_num sizeIncrease = targetSize - currentSize;
 
 	for (thread_num i = 0; i < sizeIncrease; ++i)
-		threads_.emplace_back([this] { _thread_run(); });
+		threads_.emplace_back([this] { _run_thread(); });
 
 	return sizeIncrease;
 }
 
-void Threadpool::_thread_run() {
+void Threadpool::_run_thread() {
 	while (true) {
-		std::unique_lock<std::mutex> latch(mutex_);
+		std::unique_lock<std::mutex> latch{mutex_};
 		task_cond_.wait(latch, [this] {
 			return should_finish_ || !job_queue_->empty();
 		});

@@ -1,10 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <future>
-#include <mutex>
-#include <utility>
 #include <type_traits>
 #include <vector>
 
@@ -12,9 +9,9 @@ class Threadpool {
 public:
 	using thread_num = int_fast16_t;
 
-	static const thread_num DEFAULT_INITIAL_THREADS = 8;
-	static const thread_num DEFAULT_MAX_THREADS = 0;
-	static const thread_num DEFAULT_POOL_EXTEND_INCR = 4;
+	static constexpr thread_num DEFAULT_INITIAL_THREADS = 8;
+	static constexpr thread_num DEFAULT_MAX_THREADS = 0;
+	static constexpr thread_num DEFAULT_POOL_EXTEND_INCR = 4;
 public:
 	/* Create a new thread pool.
 	   initThreads  The initial number of threads to be created.
@@ -53,7 +50,6 @@ public:
 	std::size_t numThreads() const;
 
 private:
-
 	struct Job {
 		virtual ~Job() = default;
 		virtual void operator()() = 0;
@@ -64,30 +60,30 @@ private:
 
 	template <typename PackageType>
 	struct PackagedJob : public Job {
-		explicit PackagedJob(PackageType&& task) : task_(std::move(task)) {}
-		~PackagedJob() override = default;
-		inline void operator()() override { task_(); }
+		explicit constexpr PackagedJob(PackageType&& task) noexcept : task_{std::move(task)} {}
+		constexpr void operator()() override { task_(); }
 	private:
 		PackageType task_;
 	};
 
+private:
 	void _add(std::unique_ptr<Job> job);
 	thread_num _extend();
+	void _run_thread();
 
-	void _thread_run();
-
+private:
 	class JobQueue;
 	std::unique_ptr<JobQueue> job_queue_;
 
 	std::vector<std::thread> threads_;
 
-	thread_num num_extend_;
-	thread_num max_threads_;
+	thread_num num_extend_ = DEFAULT_POOL_EXTEND_INCR;
+	thread_num max_threads_ = DEFAULT_MAX_THREADS;
 
 	mutable std::mutex mutex_;
 	std::condition_variable finished_all_jobs_cond_;
 	std::condition_variable task_cond_;
 
 	std::atomic<thread_num> working_threads_;
-	bool should_finish_;
+	bool should_finish_ = false;
 };
