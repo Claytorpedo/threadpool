@@ -1,12 +1,7 @@
 #include "catch.hpp"
 #include "../threadpool/Threadpool.hpp"
 
-#include <vector>
 #include <string>
-#include <memory>
-#include <functional>
-#include <chrono>
-#include <thread>
 
 SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 	WHEN("A threadpool is initialized with default parameters.") {
@@ -23,7 +18,7 @@ SCENARIO("A threadpool is constructed.", "[threadpool][construction]") {
 // ------------------ Test functions/functors ----------------------
 namespace {
 	// How long we expect that afterwards the other thread should have completed a task.
-	const std::chrono::milliseconds THREAD_WAIT_MILLIS(200);
+	constexpr std::chrono::milliseconds THREAD_WAIT_MILLIS(200);
 
 	void voidFunc() {}
 	void getVal(int* val) { *val = 8; }
